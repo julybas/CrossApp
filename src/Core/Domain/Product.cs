@@ -68,4 +68,25 @@ public sealed class Product
         Create(dto.Id, dto.Sku, dto.Name, dto.Unit, dto.Quantity);
 
     public override string ToString() => $"{Id} [{Sku}] {Name} — {Quantity} {Unit}";
+    
+    // Додаткове завдання 1: перетворення результатів імпорту з перевіркою інваріантів
+    public static (IReadOnlyList<Product> Items, IReadOnlyList<string> InvariantErrors) FromImportResult(ImportResult<ProductDto> importResult)
+    {
+        var validEntities = new List<Product>();
+        var domainErrors = new List<string>();
+
+        foreach (var dto in importResult.Items)
+        {
+            try
+            {
+                validEntities.Add(FromDto(dto));
+            }
+            catch (Exception ex)
+            {
+                domainErrors.Add($"Товар '{dto.Id}': порушення інваріанту ({ex.GetType().Name} — {ex.Message})");
+            }
+        }
+
+        return (validEntities, domainErrors);
+    }
 }
