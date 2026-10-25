@@ -41,6 +41,14 @@ TryDo("Видача більша за залишок (через сервіс)",
 TryDo("Порожній SKU (створення сутності)", () => Product.Create("P-002", "", "Пісок", "т", 10));
 TryDo("Спроба операції з неіснуючим ID", () => service.Receive("NON-EXISTENT-ID", 10));
 
+Console.WriteLine("\n=== Додаткове завдання: Пошук за умовою (Func<Product, bool>) ===");
+var lowStock = service.Find(p => p.Quantity < 50);
+Console.WriteLine($"Товари із залишком менше 50 шт ({lowStock.Count}):");
+foreach (var p in lowStock)
+{
+    Console.WriteLine($"   {p.Sku,-10} {p.Name,-25} {p.Quantity,5} {p.Unit}");
+}
+
 static void TryDo(string title, Action action)
 {
     try

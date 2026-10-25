@@ -86,4 +86,11 @@ public sealed class FileCatalogStore(string path) : ICatalogStore
         Flush();
         return true;
     }
+
+    public IReadOnlyList<Product> Search(Func<Product, bool> predicate)
+{
+    ArgumentNullException.ThrowIfNull(predicate);
+    EnsureLoaded();
+    return _cache.Values.Where(predicate).ToList();
+}
 }
