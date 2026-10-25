@@ -2,11 +2,17 @@
 using Core.Abstractions;
 using Core.Events;
 using Core.Services;
-using Core.Stores;
+using Core.Storage;
 
-ICatalogStore store = new InMemoryCatalogStore(); 
+ICatalogStore store = new InMemoryCatalogStore();
 
+// Формуємо шлях та створюємо директорію ДО виконання будь-яких операцій
 var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
+var logDir = Path.GetDirectoryName(logPath);
+if (!string.IsNullOrEmpty(logDir))
+{
+    Directory.CreateDirectory(logDir);
+}
 
 var sink = new CompositeSink(new INotificationSink[]
 {
@@ -20,6 +26,12 @@ void OnCatalogChanged(object? sender, CatalogChangedEventArgs e)
 {
     var line = $"{e.At:HH:mm:ss} {e.Kind,-8} {e.Id} {e.Delta,4:+0;-0} → залишок {e.QuantityAfter}";
     Console.WriteLine(line);
+    
+    // Перевірка на випадок, якщо директорію видалили під час роботи
+    if (!string.IsNullOrEmpty(logDir))
+    {
+        Directory.CreateDirectory(logDir);
+    }
     File.AppendAllText(logPath, line + Environment.NewLine);
 }
 
