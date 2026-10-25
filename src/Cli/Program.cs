@@ -1,5 +1,4 @@
 ﻿using System.Text;
-using Core;
 using Core.Abstractions;
 using Core.Domain;
 using Core.Services;
@@ -7,20 +6,16 @@ using Core.Storage;
 
 Console.OutputEncoding = Encoding.UTF8;
 
-// --- Composition Root (Вибір сховища та створення сервісу)
-bool useFile = args.Contains("--file");
-string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
-
-ICatalogStore store = useFile
-    ? new FileCatalogStore(dataPath)
-    : new InMemoryCatalogStore(SampleData.Products());
-
+// --- Composition Root (Створення сховища через фабрику та ініціалізація сервісу) ---
+ICatalogStore store = StoreFactory.Create(args);
 var service = new CatalogService(store);
 
 Console.WriteLine($"=== Сховище: {store.GetType().Name} ===");
-Console.WriteLine(useFile ? $"Шлях: {dataPath}\n" : "Режим: у пам'яті (скинеться після завершення)\n");
+Console.WriteLine(store is FileCatalogStore 
+    ? "Режим: файлове сховище (data/catalog.json)\n" 
+    : "Режим: у пам'яті (скинеться після завершення)\n");
 
-// --- Сценарій 1: Додавання та операції через сервіс 
+// --- Сценарій 1: Додавання та операції через сервіс ---
 Console.WriteLine("=== Сценарій 1: Робота через CatalogService ===");
 var created = service.Add("SKU-101", "Кабель UTP cat6", "м", 50);
 Console.WriteLine($"Додано: {created}");
@@ -32,7 +27,7 @@ service.Issue(created.Id, 30);
 Console.WriteLine($"Після видачі (-30):  {service.Find(created.Id)}");
 Console.WriteLine();
 
-// --- Сценарій 2: Виведення списку товарів зі сховища 
+// --- Сценарій 2: Виведення списку товарів зі сховища ---
 Console.WriteLine("=== Сценарій 2: Список усіх товарів (перші 5) ===");
 foreach (var p in service.All().Take(5))
 {
@@ -40,7 +35,7 @@ foreach (var p in service.All().Take(5))
 }
 Console.WriteLine($"Всього в сховищі: {service.All().Count} товарів.\n");
 
-// --- Сценарій 3: Перевірка інваріантів та сервісних помилок 
+// --- Сценарій 3: Перевірка інваріантів та сервісних помилок ---
 Console.WriteLine("=== Сценарій 3: Порушення інваріантів та помилки ===");
 TryDo("Видача більша за залишок (через сервіс)", () => service.Issue(created.Id, 1000));
 TryDo("Порожній SKU (створення сутності)", () => Product.Create("P-002", "", "Пісок", "т", 10));
