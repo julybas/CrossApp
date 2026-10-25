@@ -1,55 +1,60 @@
 ﻿using System.Text;
+using Core;
+using Core.Abstractions;
 using Core.Domain;
-using Core.Dto;
-using Core.Import;
+using Core.Services;
+using Core.Storage;
 
 Console.OutputEncoding = Encoding.UTF8;
 
-Console.WriteLine("=== Сценарій 1: успіх ===");
-Product product = Product.Create("P-001", "sku-001", "Цемент М400 25кг", "шт", 100);
-Console.WriteLine(product);
+// --- Composition Root (Вибір сховища та створення сервісу)
+bool useFile = args.Contains("--file");
+string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "catalog.json");
 
-product.RegisterArrival(50);
-product.Issue(30);
-Console.WriteLine(product);
+ICatalogStore store = useFile
+    ? new FileCatalogStore(dataPath)
+    : new InMemoryCatalogStore(SampleData.Products());
 
-Console.WriteLine("\n=== Сценарій 2: порушення інваріантів ===");
-TryDo("видача більша за залишок", () => product.Issue(1000));
-TryDo("порожній SKU", () => Product.Create("P-002", "", "Пісок", "т", 10));
-TryDo("від'ємний залишок", () => Product.Create("P-003", "SKU-003", "Цегла", "шт", -5));
+var service = new CatalogService(store);
 
-Console.WriteLine("\n=== Сценарій 3 (Додаткове): Імпорт з CSV + валідація інваріантів ===");
-string path = Path.Combine("data", "sample.csv");
-if (File.Exists(path))
+Console.WriteLine($"=== Сховище: {store.GetType().Name} ===");
+Console.WriteLine(useFile ? $"Шлях: {dataPath}\n" : "Режим: у пам'яті (скинеться після завершення)\n");
+
+// --- Сценарій 1: Додавання та операції через сервіс 
+Console.WriteLine("=== Сценарій 1: Робота через CatalogService ===");
+var created = service.Add("SKU-101", "Кабель UTP cat6", "м", 50);
+Console.WriteLine($"Додано: {created}");
+
+service.Receive(created.Id, 25);
+Console.WriteLine($"Після приходу (+25): {service.Find(created.Id)}");
+
+service.Issue(created.Id, 30);
+Console.WriteLine($"Після видачі (-30):  {service.Find(created.Id)}");
+Console.WriteLine();
+
+// --- Сценарій 2: Виведення списку товарів зі сховища 
+Console.WriteLine("=== Сценарій 2: Список усіх товарів (перші 5) ===");
+foreach (var p in service.All().Take(5))
 {
-    ImportResult<ProductDto> csvResult = ProductCsvImporter.Load(path);
-    var (entities, domainErrors) = Product.FromImportResult(csvResult);
-
-    Console.WriteLine($"Створено валідних доменних сутностей: {entities.Count}");
-    foreach (var p in entities.Take(3))
-    {
-        Console.WriteLine($"  {p}");
-    }
-
-    if (domainErrors.Count > 0)
-    {
-        Console.WriteLine($"Помилки доменних інваріантів під час імпорту: {domainErrors.Count}");
-        foreach (var err in domainErrors)
-        {
-            Console.WriteLine($"  ! {err}");
-        }
-    }
+    Console.WriteLine($"  {p.Id,-8} {p.Sku,-10} {p.Name,-25} {p.Quantity,5} {p.Unit}");
 }
+Console.WriteLine($"Всього в сховищі: {service.All().Count} товарів.\n");
+
+// --- Сценарій 3: Перевірка інваріантів та сервісних помилок 
+Console.WriteLine("=== Сценарій 3: Порушення інваріантів та помилки ===");
+TryDo("Видача більша за залишок (через сервіс)", () => service.Issue(created.Id, 1000));
+TryDo("Порожній SKU (створення сутності)", () => Product.Create("P-002", "", "Пісок", "т", 10));
+TryDo("Спроба операції з неіснуючим ID", () => service.Receive("NON-EXISTENT-ID", 10));
 
 static void TryDo(string title, Action action)
 {
     try
     {
         action();
-        Console.WriteLine($"  {title}: виняток НЕ спрацював — інваріант відсутній!");
+        Console.WriteLine($"   {title}: виняток НЕ спрацював — інваріант відсутній!");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"  {title}: {ex.GetType().Name} — {ex.Message}");
+        Console.WriteLine($"   {title}: {ex.GetType().Name} — {ex.Message}");
     }
 }
