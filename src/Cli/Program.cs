@@ -1,63 +1,57 @@
-﻿using System.Text;
+﻿using Cli.Sinks;
 using Core.Abstractions;
-using Core.Domain;
+using Core.Events;
 using Core.Services;
-using Core.Storage;
+using Core.Stores;
 
-Console.OutputEncoding = Encoding.UTF8;
+ICatalogStore store = new InMemoryCatalogStore(); 
 
-// --- Composition Root (Створення сховища через фабрику та ініціалізація сервісу) ---
-ICatalogStore store = StoreFactory.Create(args);
-var service = new CatalogService(store);
+var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
 
-Console.WriteLine($"=== Сховище: {store.GetType().Name} ===");
-Console.WriteLine(store is FileCatalogStore 
-    ? "Режим: файлове сховище (data/catalog.json)\n" 
-    : "Режим: у пам'яті (скинеться після завершення)\n");
+var sink = new CompositeSink(new INotificationSink[]
+{
+    new ConsoleSink(),
+    new FileSink(logPath)
+});
 
-// --- Сценарій 1: Додавання та операції через сервіс ---
-Console.WriteLine("=== Сценарій 1: Робота через CatalogService ===");
+var service = new CatalogService(store, sink);
+
+void OnCatalogChanged(object? sender, CatalogChangedEventArgs e)
+{
+    var line = $"{e.At:HH:mm:ss} {e.Kind,-8} {e.Id} {e.Delta,4:+0;-0} → залишок {e.QuantityAfter}";
+    Console.WriteLine(line);
+    File.AppendAllText(logPath, line + Environment.NewLine);
+}
+
+service.Changed += OnCatalogChanged;
+
+int changes = 0;
+service.Changed += (_, _) => changes++;
+
+Console.WriteLine("=== 1. Успішні операції ===");
 var created = service.Add("SKU-101", "Кабель UTP cat6", "м", 50);
-Console.WriteLine($"Додано: {created}");
-
 service.Receive(created.Id, 25);
-Console.WriteLine($"Після приходу (+25): {service.Find(created.Id)}");
+Console.WriteLine($"Подій отримано: {changes}\n");
 
-service.Issue(created.Id, 30);
-Console.WriteLine($"Після видачі (-30):  {service.Find(created.Id)}");
-Console.WriteLine();
+Console.WriteLine("=== 2. Відписка від події ===");
+service.Changed -= OnCatalogChanged;
+service.Receive(created.Id, 5);
+Console.WriteLine($"Подій отримано: {changes}\n");
 
-// --- Сценарій 2: Виведення списку товарів зі сховища ---
-Console.WriteLine("=== Сценарій 2: Список усіх товарів (перші 5) ===");
-foreach (var p in service.All().Take(5))
+Console.WriteLine("=== 3. Сценарій відмови (інваріант) ===");
+try
 {
-    Console.WriteLine($"  {p.Id,-8} {p.Sku,-10} {p.Name,-25} {p.Quantity,5} {p.Unit}");
+    service.Receive(created.Id, -10);
 }
-Console.WriteLine($"Всього в сховищі: {service.All().Count} товарів.\n");
-
-// --- Сценарій 3: Перевірка інваріантів та сервісних помилок ---
-Console.WriteLine("=== Сценарій 3: Порушення інваріантів та помилки ===");
-TryDo("Видача більша за залишок (через сервіс)", () => service.Issue(created.Id, 1000));
-TryDo("Порожній SKU (створення сутності)", () => Product.Create("P-002", "", "Пісок", "т", 10));
-TryDo("Спроба операції з неіснуючим ID", () => service.Receive("NON-EXISTENT-ID", 10));
-
-Console.WriteLine("\n=== Додаткове завдання: Пошук за умовою (Func<Product, bool>) ===");
-var lowStock = service.Find(p => p.Quantity < 50);
-Console.WriteLine($"Товари із залишком менше 50 шт ({lowStock.Count}):");
-foreach (var p in lowStock)
+catch (Exception ex)
 {
-    Console.WriteLine($"   {p.Sku,-10} {p.Name,-25} {p.Quantity,5} {p.Unit}");
+    Console.WriteLine($"Помилка: {ex.Message}");
 }
+Console.WriteLine($"Подій після помилки: {changes}\n");
 
-static void TryDo(string title, Action action)
+Console.WriteLine("=== 4. Фільтрація через Func ===");
+var lowStock = service.FindAll(p => p.Quantity < 100);
+foreach (var product in lowStock)
 {
-    try
-    {
-        action();
-        Console.WriteLine($"   {title}: виняток НЕ спрацював — інваріант відсутній!");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"   {title}: {ex.GetType().Name} — {ex.Message}");
-    }
+    Console.WriteLine($"Товар: {product.Name}, Залишок: {product.Quantity}");
 }
