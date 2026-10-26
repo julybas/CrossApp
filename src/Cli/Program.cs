@@ -65,5 +65,25 @@ Console.WriteLine("=== 4. Фільтрація через Func ===");
 var lowStock = service.FindAll(p => p.Quantity < 100);
 foreach (var product in lowStock)
 {
-    Console.WriteLine($"Товар: {product.Name}, Залишок: {product.Quantity}");
+    Console.WriteLine($"Товар: {product.Name}, Залишок: {product.Quantity}\n");
+}
+
+Console.WriteLine("=== Крок 6. Сценарій відмови (інваріант) ===");
+try
+{
+    // Некоректне значення: -10 викликає виняток інваріанту в RegisterArrival
+    service.Receive(created.Id, -10); 
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Помилка (очікувано): {ex.Message}");
+}
+Console.WriteLine($"Подій після помилки: {changes}\n"); // Лічильник не змінився!
+
+Console.WriteLine("=== Крок 7. Делегат Func (пошук товарів) ===");
+// Використовуємо предикат p.Quantity < 100, щоб створений кабель (75 шт) потрапив у результат
+var filteredProducts = service.FindAll(p => p.Quantity < 100);
+foreach (var p in filteredProducts)
+{
+    Console.WriteLine($"Знайдено: {p.Name} | Залишок: {p.Quantity}");
 }
