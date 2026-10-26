@@ -1,55 +1,89 @@
-﻿using System.Text;
-using Core.Domain;
-using Core.Dto;
-using Core.Import;
+﻿using Cli.Sinks;
+using Core.Abstractions;
+using Core.Events;
+using Core.Services;
+using Core.Storage;
 
-Console.OutputEncoding = Encoding.UTF8;
+ICatalogStore store = new InMemoryCatalogStore();
 
-Console.WriteLine("=== Сценарій 1: успіх ===");
-Product product = Product.Create("P-001", "sku-001", "Цемент М400 25кг", "шт", 100);
-Console.WriteLine(product);
-
-product.RegisterArrival(50);
-product.Issue(30);
-Console.WriteLine(product);
-
-Console.WriteLine("\n=== Сценарій 2: порушення інваріантів ===");
-TryDo("видача більша за залишок", () => product.Issue(1000));
-TryDo("порожній SKU", () => Product.Create("P-002", "", "Пісок", "т", 10));
-TryDo("від'ємний залишок", () => Product.Create("P-003", "SKU-003", "Цегла", "шт", -5));
-
-Console.WriteLine("\n=== Сценарій 3 (Додаткове): Імпорт з CSV + валідація інваріантів ===");
-string path = Path.Combine("data", "sample.csv");
-if (File.Exists(path))
+// Формуємо шлях та створюємо директорію ДО виконання будь-яких операцій
+var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
+var logDir = Path.GetDirectoryName(logPath);
+if (!string.IsNullOrEmpty(logDir))
 {
-    ImportResult<ProductDto> csvResult = ProductCsvImporter.Load(path);
-    var (entities, domainErrors) = Product.FromImportResult(csvResult);
-
-    Console.WriteLine($"Створено валідних доменних сутностей: {entities.Count}");
-    foreach (var p in entities.Take(3))
-    {
-        Console.WriteLine($"  {p}");
-    }
-
-    if (domainErrors.Count > 0)
-    {
-        Console.WriteLine($"Помилки доменних інваріантів під час імпорту: {domainErrors.Count}");
-        foreach (var err in domainErrors)
-        {
-            Console.WriteLine($"  ! {err}");
-        }
-    }
+    Directory.CreateDirectory(logDir);
 }
 
-static void TryDo(string title, Action action)
+var sink = new CompositeSink(new INotificationSink[]
 {
-    try
+    new ConsoleSink(),
+    new FileSink(logPath)
+});
+
+var service = new CatalogService(store, sink);
+
+void OnCatalogChanged(object? sender, CatalogChangedEventArgs e)
+{
+    var line = $"{e.At:HH:mm:ss} {e.Kind,-8} {e.Id} {e.Delta,4:+0;-0} → залишок {e.QuantityAfter}";
+    Console.WriteLine(line);
+    
+    // Перевірка на випадок, якщо директорію видалили під час роботи
+    if (!string.IsNullOrEmpty(logDir))
     {
-        action();
-        Console.WriteLine($"  {title}: виняток НЕ спрацював — інваріант відсутній!");
+        Directory.CreateDirectory(logDir);
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"  {title}: {ex.GetType().Name} — {ex.Message}");
-    }
+    File.AppendAllText(logPath, line + Environment.NewLine);
+}
+
+service.Changed += OnCatalogChanged;
+
+int changes = 0;
+service.Changed += (_, _) => changes++;
+
+Console.WriteLine("=== 1. Успішні операції ===");
+var created = service.Add("SKU-101", "Кабель UTP cat6", "м", 50);
+service.Receive(created.Id, 25);
+Console.WriteLine($"Подій отримано: {changes}\n");
+
+Console.WriteLine("=== 2. Відписка від події ===");
+service.Changed -= OnCatalogChanged;
+service.Receive(created.Id, 5);
+Console.WriteLine($"Подій отримано: {changes}\n");
+
+Console.WriteLine("=== 3. Сценарій відмови (інваріант) ===");
+try
+{
+    service.Receive(created.Id, -10);
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Помилка: {ex.Message}");
+}
+Console.WriteLine($"Подій після помилки: {changes}\n");
+
+Console.WriteLine("=== 4. Фільтрація через Func ===");
+var lowStock = service.FindAll(p => p.Quantity < 100);
+foreach (var product in lowStock)
+{
+    Console.WriteLine($"Товар: {product.Name}, Залишок: {product.Quantity}\n");
+}
+
+Console.WriteLine("=== Крок 6. Сценарій відмови (інваріант) ===");
+try
+{
+    // Некоректне значення: -10 викликає виняток інваріанту в RegisterArrival
+    service.Receive(created.Id, -10); 
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Помилка (очікувано): {ex.Message}");
+}
+Console.WriteLine($"Подій після помилки: {changes}\n"); // Лічильник не змінився!
+
+Console.WriteLine("=== Крок 7. Делегат Func (пошук товарів) ===");
+// Використовуємо предикат p.Quantity < 100, щоб створений кабель (75 шт) потрапив у результат
+var filteredProducts = service.FindAll(p => p.Quantity < 100);
+foreach (var p in filteredProducts)
+{
+    Console.WriteLine($"Знайдено: {p.Name} | Залишок: {p.Quantity}");
 }
