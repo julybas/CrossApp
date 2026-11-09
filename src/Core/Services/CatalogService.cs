@@ -9,7 +9,6 @@ public sealed class CatalogService(ICatalogStore store, INotificationSink? sink 
     private readonly ICatalogStore _store = store ?? throw new ArgumentNullException(nameof(store));
     private readonly INotificationSink? _sink = sink;
 
-    // 1. Подія згідно з основним завданням ЛР6
     public event EventHandler<CatalogChangedEventArgs>? Changed;
 
     private void OnChanged(Product p, CatalogChangeKind kind, int delta)
