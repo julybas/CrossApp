@@ -1,64 +1,58 @@
-﻿using Cli.Sinks;
+﻿using Core;
 using Core.Abstractions;
-using Core.Events;
+using Core.Domain;
+using Core.Reports;
 using Core.Services;
 using Core.Storage;
 
-ICatalogStore store = new InMemoryCatalogStore();
+// 1. Ініціалізуємо сховище та сервіс із даними з SampleData
+ICatalogStore store = new InMemoryCatalogStore(SampleData.Products());
+var service = new CatalogService(store);
 
-// Формуємо шлях до файлу логів
-var logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
+var items = service.All();
+var command = args.FirstOrDefault(a => !a.StartsWith("--")) ?? "report-top";
 
-// Додаткове завдання: Створюємо CompositeSink з двох Sink-ів
-var sink = new CompositeSink(new INotificationSink[]
+switch (command)
 {
-    new ConsoleSink(),
-    new FileSink(logPath)
-});
-
-// Передаємо sink у сервіс (ручний DI)
-var service = new CatalogService(store, sink);
-
-// Крок 3: Локальна функція-підписник для подій C#
-void OnCatalogChanged(object? sender, CatalogChangedEventArgs e)
-{
-    var line = $"[Event] {e.At:HH:mm:ss} {e.Kind,-8} {e.Id} {e.Delta,4:+0;-0} → залишок {e.QuantityAfter}";
-    Console.WriteLine(line);
+    case "report-top":
+        Print(ReportService.TopByQuantity(items, 5));
+        break;
+    case "report-low":
+        Print(ReportService.LowStock(items, 10));
+        break;
+    case "report-groups":
+        foreach (var g in ReportService.ByUnit(items))
+            Console.WriteLine($"{g.Key,-6} позицій: {g.Count,3}   сумарно: {g.TotalQuantity,6}");
+        break;
+    case "report-sum":
+        var t = ReportService.Totals(items);
+        Console.WriteLine($"позицій {t.Items}, всього {t.Total}, середнє {t.Average:F2}, макс {t.Max}");
+        break;
+    case "demo-deferred":
+        RunDeferredDemo(service);
+        break;
+    default:
+        Console.WriteLine("Доступні команди: report-top | report-low | report-groups | report-sum | demo-deferred");
+        break;
 }
 
-// Підписка іменованим методом (щоб потім можна було відписатися)
-service.Changed += OnCatalogChanged;
-
-// Крок 4: Другий підписник — лямбда із замиканням над лічильником
-int changes = 0;
-service.Changed += (_, _) => changes++;
-
-Console.WriteLine("=== 1–5. Успішні операції та підписка ===");
-var created = service.Add("SKU-101", "Кабель UTP cat6", "м", 50);
-service.Receive(created.Id, 25);
-Console.WriteLine($"Подій отримано: {changes}\n");
-
-Console.WriteLine("=== Відписка від події (service.Changed -= OnCatalogChanged) ===");
-service.Changed -= OnCatalogChanged;
-service.Receive(created.Id, 5); // Операція виконається, але event-обробник вже не виведе рядок
-Console.WriteLine($"Подій отримано (лямбда продовжила рахувати): {changes}\n");
-
-Console.WriteLine("=== Крок 6. Сценарій відмови (інваріант) ===");
-try
+static void Print(IReadOnlyList<StockLine> lines)
 {
-    // Некоректне значення (-10) викликає виняток інваріанту в сервісі
-    service.Receive(created.Id, -10); 
+    foreach (var l in lines)
+        Console.WriteLine($"{l.Sku,-10} {l.Name,-25} {l.Quantity,6} {l.Unit}");
 }
-catch (Exception ex)
-{
-    Console.WriteLine($"Помилка (очікувано): {ex.Message}");
-}
-Console.WriteLine($"Подій після помилки: {changes}\n"); // Лічильник не змінився!
 
-Console.WriteLine("=== Крок 7. Делегат Func (пошук товарів) ===");
-// Використовуємо предикат p.Quantity < 100 для відбору товарів
-var filteredProducts = service.FindAll(p => p.Quantity < 100);
-foreach (var p in filteredProducts)
+static void RunDeferredDemo(CatalogService service)
 {
-    Console.WriteLine($"Знайдено: {p.Name} | Залишок: {p.Quantity}");
+    var source = service.All().ToList();
+    var query = source.Where(p => p.Quantity < 10);
+
+    Console.WriteLine($"Дефіцитних до змін: {query.Count()}");
+
+    source.Add(Product.Create("tmp00001", "SKU-999", "Скоба", "шт", 3));
+    Console.WriteLine($"Дефіцитних після змін: {query.Count()}");
+
+    var snapshot = query.ToList();
+    source.Clear();
+    Console.WriteLine($"У знімку лишилось: {snapshot.Count}");
 }
