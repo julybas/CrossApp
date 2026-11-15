@@ -4,22 +4,24 @@ namespace Core;
 
 public static class SampleData
 {
-    public static List<Product> Products() => new()
-    {
-        Product.Create("P-001", "SKU-001", "Цемент М400 25кг", "шт", 100),
-        Product.Create("P-002", "SKU-002", "Пісок будівельний", "т", 25),
-        Product.Create("P-003", "SKU-003", "Цегла червона", "шт", 1500),
-        Product.Create("P-004", "SKU-004", "Ґрунтовка ГФ-021", "л", 40),
-        Product.Create("P-005", "SKU-005", "Арматура 12мм", "м", 600),
-        Product.Create("P-006", "SKU-006", "Шпаклівка 20кг", "мішок", 80),
-        Product.Create("P-007", "SKU-007", "Клей для плитки 25кг", "мішок", 120),
-        Product.Create("P-008", "SKU-008", "Гіпсокартон 12.5мм", "лист", 90),
-        Product.Create("P-009", "SKU-009", "Профіль для ГКЛ 60х27", "шт", 200),
-        Product.Create("P-010", "SKU-010", "Саморізи 3.5х25", "пачка", 50),
-        Product.Create("P-011", "SKU-011", "Фарба акрилова 10л", "відро", 15),
-        Product.Create("P-012", "SKU-012", "Лак деревозахисний", "л", 30),
-        Product.Create("P-013", "SKU-013", "Піна монтажна 750мл", "шт", 65),
-        Product.Create("P-014", "SKU-014", "Герметик силіконовий", "шт", 45),
-        Product.Create("P-015", "SKU-015", "Кабель UTP cat6", "м", 500)
-    };
+    public static IReadOnlyList<Product> Products() =>
+    [
+        Product.Create("id01", "SKU-101", "Кабель ВВГнг 3х2.5", "м", 120),
+        Product.Create("id02", "SKU-102", "Кабель UTP Cat5e", "м", 85),
+        Product.Create("id03", "SKU-103", "Гофра ПВХ 20мм", "м", 50),
+        Product.Create("id04", "SKU-104", "Труба металопластикова", "м", 8),
+        Product.Create("id05", "SKU-201", "Автомат 16А", "шт", 45),
+        Product.Create("id06", "SKU-202", "Розетка подвійна", "шт", 30),
+        Product.Create("id07", "SKU-203", "Вимикач одноклавішний", "шт", 25),
+        Product.Create("id08", "SKU-204", "Коробка розподільча", "шт", 60),
+        Product.Create("id09", "SKU-205", "Світильник LED 36W", "шт", 4),
+        Product.Create("id10", "SKU-206", "Датчик руху", "шт", 12),
+        Product.Create("id11", "SKU-207", "Клемник WAGO 3-пров.", "шт", 11),
+        Product.Create("id12", "SKU-301", "Дюбель 6х40 (100 шт)", "уп", 18),
+        Product.Create("id13", "SKU-302", "Стяжка кабельна 200мм", "уп", 40),
+        Product.Create("id14", "SKU-303", "Ізолента ПВХ чорна", "уп", 7),
+        Product.Create("id15", "SKU-401", "Фарба акрилова біла", "л", 15),
+        Product.Create("id16", "SKU-402", "Ґрунтовка глибока", "л", 22),
+        Product.Create("id17", "SKU-403", "Розчинник 646", "л", 5)
+    ];
 }
