@@ -1,10 +1,9 @@
-using Core.Domain; // Заміни на свій namespace, де лежить модель Product
+using Core.Domain;
 
 namespace Core.Reports;
 
 public static class ReportService
 {
-    // 1) Фільтр + сортування + проєкція
     public static IReadOnlyList<StockLine> LowStock(IEnumerable<Product> source, int threshold) =>
         source.Where(p => p.Quantity < threshold)
               .OrderBy(p => p.Quantity)
@@ -12,22 +11,34 @@ public static class ReportService
               .Select(p => new StockLine(p.Sku, p.Name, p.Quantity, p.Unit))
               .ToList();
 
-    // 2) Топ-N зі стабільним порядком (другий ключ сортування)
     public static IReadOnlyList<StockLine> TopByQuantity(IEnumerable<Product> source, int n) =>
-        source.OrderByDescending(p => p.Quantity)
-              .ThenBy(p => p.Sku, StringComparer.Ordinal)
-              .Take(n)
+        source.TopBy(p => p.Quantity, p => p.Sku, n, StringComparer.Ordinal)
               .Select(p => new StockLine(p.Sku, p.Name, p.Quantity, p.Unit))
               .ToList();
 
-    // 3) Групування за одиницею виміру з підрахунком і сумою
     public static IReadOnlyList<GroupSummary> ByUnit(IEnumerable<Product> source) =>
         source.GroupBy(p => p.Unit, StringComparer.OrdinalIgnoreCase)
               .Select(g => new GroupSummary(g.Key, g.Count(), g.Sum(p => p.Quantity)))
               .OrderByDescending(s => s.TotalQuantity)
               .ToList();
 
-    // 4) Агрегати з безпечною обробкою порожньої послідовності
+    public static IReadOnlyList<GroupSummary> TopUnitsByQuantity(IEnumerable<Product> source, int n) =>
+        ByUnit(source)
+            .TopBy(g => g.TotalQuantity, g => g.Key, n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    public static IReadOnlyList<GroupSummary> ByUnitQuerySyntax(IEnumerable<Product> source)
+    {
+        var query =
+            from product in source
+            group product by product.Unit.ToUpperInvariant() into g
+            let total = g.Sum(p => p.Quantity)
+            orderby total descending
+            select new GroupSummary(g.Key, g.Count(), total);
+
+        return query.ToList();
+    }
+
     public static (int Items, int Total, double Average, int Max) Totals(IEnumerable<Product> source)
     {
         var list = source.ToList();
